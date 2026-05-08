@@ -1,0 +1,13 @@
+{
+	"compilerOptions": {
+		"strict": true,
+		"noEmit": true,
+		"allowJs": true,
+		"target": "ESNext",
+		"skipLibCheck": true,
+		"moduleResolution": "bundler",
+		"types": ["vite/client"],
+		"lib": ["ESNext", "DOM"]
+	},
+	"include": ["src"]
+}
