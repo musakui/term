@@ -1,4 +1,4 @@
-import { Terminal } from '@xterm/xterm'
+import { Terminal } from 'https://esm.sh/@xterm/xterm@6.0.0'
 import '@xterm/xterm/css/xterm.css'
 import './styles.css'
 
@@ -23,7 +23,7 @@ const _e = (c) => `\x1b[${c}`
  */
 const _c = (n, s) => `${_e(`${n}m`)}${s}${_e('0m')}`
 
-const PROMPT = _c(33, '\n> ')
+const PROMPT = _c(33, '\n❯ ')
 
 const term = new Terminal({
 	cursorBlink: true,
@@ -31,6 +31,10 @@ const term = new Terminal({
 })
 
 term.onResize((size) => send(size))
+
+term.onTitleChange((t) => {
+	document.title = t
+})
 
 term.onData((data) => {
 	if (mode === 'command') {
@@ -47,8 +51,8 @@ const el = document.getElementById('terminal')
 term.open(el)
 
 const oriRect = document.querySelector('.xterm-screen')?.getBoundingClientRect()
-const charWidth = (oriRect?.width ?? 660) / 80
-const charHeight = (oriRect?.height ?? 432) / 24
+const charWidth = (oriRect?.width ?? 660) / term.cols
+const charHeight = (oriRect?.height ?? 432) / term.rows
 const ro = new ResizeObserver((et) => resize(et[0].contentRect))
 
 resize(el.getBoundingClientRect())
@@ -125,13 +129,16 @@ function runCommand(cmd, ...args) {
 /** @param {string} url */
 function connect(url) {
 	term.writeln(_c(2, '⬡ connecting…'))
-	ws = new WebSocket(url)
 	mode = 'pending'
 	buf = ''
+
+	ws = new WebSocket(url)
+	ws.binaryType = 'arraybuffer'
 
 	ws.addEventListener('open', () => {
 		mode = 'shell'
 		pingTimer = setInterval(() => ws.send('"ping"'), 15_000)
+		send({ cols: term.cols, rows: term.rows })
 	})
 
 	ws.addEventListener('error', (err) => {
@@ -153,6 +160,12 @@ function connect(url) {
 
 	ws.addEventListener('message', ({ data }) => {
 		if (data === '"pong"') return
+
+		if (data instanceof ArrayBuffer) {
+			term.write(new Uint8Array(data))
+			return
+		}
+
 		/** @type {import('./types').ServerMsg}*/
 		let msg
 		try {

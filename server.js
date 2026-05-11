@@ -1,4 +1,6 @@
+import { join } from 'node:path'
 import { createServer } from 'node:http'
+import { createReadStream } from 'node:fs'
 
 import { WebSocketServer } from 'ws'
 import { spawn } from 'node-pty'
@@ -21,17 +23,29 @@ const shellOpts = {
 }
 
 const server = createServer((req, res) => {
-	//
-})
-
-const wss = new WebSocketServer({ server })
-
-wss.on('connection', (ws, req) => {
-	if (req.url !== '/sh') {
-		ws.close()
+	if (req.url === '/') {
+		try {
+			const st = createReadStream(join(process.cwd(), 'index.html'))
+			res.writeHead(200, { 'content-type': 'text/html' })
+			st.pipe(res)
+		} catch (err) {
+			res.writeHead(500).end(JSON.stringify(err))
+		}
+		return
+	} else if (req.url === '/status') {
+		res.writeHead(200).end('"ok"')
 		return
 	}
 
+	res.writeHead(404).end('"not found"')
+})
+
+const wss = new WebSocketServer({
+	server,
+	path: '/sh',
+})
+
+wss.on('connection', (ws, req) => {
 	console.log(`[ws] new sh from ${req.socket.remoteAddress}`)
 
 	try {
@@ -43,9 +57,18 @@ wss.on('connection', (ws, req) => {
 	}
 })
 
+process.on('SIGINT', close)
+process.on('SIGTERM', close)
+
 server.listen(PORT, () => {
 	console.log(`server running on port ${PORT}`)
 })
+
+function close() {
+	console.log('\nshutting down')
+	server.close()
+	process.exit()
+}
 
 /** @param {import('ws').WebSocket} ws */
 function createSh(ws) {
