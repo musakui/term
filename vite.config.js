@@ -6,9 +6,13 @@ export default defineConfig({
 		singleFile(),
 	],
 	server: {
+		host: '0.0.0.0',
 		proxy: {
 			'/sh': { target: 'ws://localhost:3141', ws: true },
 		},
+		allowedHosts: [
+			//
+		],
 	},
 	build: {
 		modulePreload: {

@@ -6,7 +6,7 @@ import './styles.css'
 let mode = 'command'
 
 /** user input buffer */
-let buf = ''
+let buf = 'connect'
 
 /** @type {WebSocket | null} */
 let ws = null
@@ -25,12 +25,14 @@ const _c = (n, s) => `${_e(`${n}m`)}${s}${_e('0m')}`
 
 const PROMPT = _c(33, '\n❯ ')
 
+const encoder = new TextEncoder()
+
 const term = new Terminal({
 	cursorBlink: true,
 	cursorStyle: 'bar',
 })
 
-term.onResize((size) => send(size))
+term.onResize((s) => send({ size: [s.cols, s.rows] }))
 
 term.onTitleChange((t) => {
 	document.title = t
@@ -41,8 +43,8 @@ term.onData((data) => {
 		for (const char of data) {
 			handleChar(char)
 		}
-	} else if (mode === 'shell') {
-		send({ data })
+	} else if (ws && mode === 'shell') {
+		ws.send(encoder.encode(data))
 	}
 })
 
@@ -60,6 +62,7 @@ ro.observe(el)
 
 term.writeln(_c(2, 'usage: connect [ws://host:port]'))
 term.write(PROMPT)
+term.write(buf)
 
 /** @param {string} char */
 function handleChar(char) {
@@ -137,8 +140,8 @@ function connect(url) {
 
 	ws.addEventListener('open', () => {
 		mode = 'shell'
-		pingTimer = setInterval(() => ws.send('"ping"'), 15_000)
-		send({ cols: term.cols, rows: term.rows })
+		pingTimer = setInterval(() => ws.send('ping'), 15_000)
+		send({ size: [term.cols, term.rows] })
 	})
 
 	ws.addEventListener('error', (err) => {
@@ -159,7 +162,7 @@ function connect(url) {
 	})
 
 	ws.addEventListener('message', ({ data }) => {
-		if (data === '"pong"') return
+		if (data === 'pong') return
 
 		if (data instanceof ArrayBuffer) {
 			term.write(new Uint8Array(data))
@@ -175,9 +178,7 @@ function connect(url) {
 			//
 		}
 
-		if (msg.type === 'out') {
-			term.write(msg.data)
-		} else if (msg.type === 'err') {
+		if (msg.type === 'err') {
 			term.writeln(`\n${_c(31, `[error] ${msg.message}`)}`)
 		} else if (msg.type === 'exit') {
 			term.writeln(`\n${_c(33, `[shell exited with code ${msg.code}]`)}`)
@@ -185,7 +186,7 @@ function connect(url) {
 	})
 }
 
-/** @param {import('./types').ClientMsg} msg */
+/** @param {Record<string, unknown>} msg */
 function send(msg) {
 	if (ws?.readyState !== 1) return
 	ws.send(JSON.stringify(msg))

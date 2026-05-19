@@ -8,6 +8,8 @@ import { spawn } from 'node-pty'
 const TERM = 'xterm-256color'
 const PORT = Number(process.env.PORT ?? 3141)
 
+const encoder = new TextEncoder()
+
 const shell = process.env.SHELL ?? '/bin/sh'
 const shellArgs = ['--login']
 const shellOpts = {
@@ -72,17 +74,15 @@ function close() {
 
 /** @param {import('ws').WebSocket} ws */
 function createSh(ws) {
-	/** @param {import('./src/types').ServerMsg} msg */
-	const send = (msg) => ws.send(JSON.stringify(msg))
-
 	const pty = spawn(shell, shellArgs, shellOpts)
 
 	console.log(`[sh] spawned pid=${pty.pid} shell=${shell}`)
 
-	pty.onData((data) => send({ type: 'out', data }))
+	pty.onData((data) => ws.send(encoder.encode(data)))
+
 	pty.onExit(({ exitCode }) => {
 		console.log(`[sh] pid=${pty.pid} exited code=${exitCode}`)
-		send({ type: 'exit', code: exitCode })
+		ws.send(JSON.stringify({ type: 'exit', code: exitCode }))
 		ws.close()
 	})
 
@@ -96,18 +96,24 @@ function createSh(ws) {
 		eat(() => pty.kill())
 	})
 
-	ws.on('message', (raw) => eat(() => handle(JSON.parse(raw.toString()))))
+	ws.on('message', (raw, isBin) => {
+		if (isBin) return pty.write(raw)
 
-	/** @param {import('./src/types').ClientMsg} msg */
-	function handle(msg) {
-		if (msg === 'ping') {
-			send('pong')
-		} else if ('cols' in msg) {
-			pty.resize(msg.cols, msg.rows)
-		} else {
-			pty.write(msg.data)
+		const txt = raw.toString()
+		if (txt === 'ping') return ws.send('pong')
+
+		try {
+			/** @type {Record<string, unknown>} */
+			const data = JSON.parse(txt)
+			if ('size' in data) {
+				/** @type {[number, number]} */
+				const sz = data.size
+				pty.resize(sz[0], sz[1])
+			}
+		} catch {
+			//
 		}
-	}
+	})
 }
 
 /** @param {() => void} fn */
