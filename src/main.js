@@ -1,4 +1,4 @@
-import { Terminal } from 'https://esm.sh/@xterm/xterm@6.0.0'
+import { Terminal } from '@xterm/xterm'
 import '@xterm/xterm/css/xterm.css'
 import './styles.css'
 

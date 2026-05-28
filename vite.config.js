@@ -15,6 +15,9 @@ export default defineConfig({
 		],
 	},
 	build: {
+		rollupOptions: {
+			external: ['@xterm/xterm'],
+		},
 		modulePreload: {
 			polyfill: false,
 		},
